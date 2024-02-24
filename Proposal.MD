@@ -14,7 +14,11 @@ Our project will follow these steps to research the problem:
 1. **Data Collection and Preprocessing**:
    - Gather a diverse dataset containing both real and aritifically generated images of human faces.
    - Preprocess the data by removing noise, resizing images, and ensuring consistent formats.
-   - Multiple datasets are publicly available containing sufficient numbers of labeled images
+   - Multiple datasets are publicly available containing sufficient numbers of labeled images, including:
+      - https://www.kaggle.com/datasets/ciplab/real-and-fake-face-detection
+      - https://www.kaggle.com/datasets/xhlulu/140k-real-and-fake-faces
+      - https://huggingface.co/datasets/InfImagine/FakeImageDataset
+      - https://datagen.tech/blog/face-datasets/
 
 2. **Direct Image Analysis**:
    - Train model on dataset to identify relevant features from the images using techniques such as Convolutional Neural Networks (CNNs) or pre-trained models like VGG16 or ResNet.
