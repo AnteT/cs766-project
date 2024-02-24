@@ -1,6 +1,5 @@
-# Project Proposal: Aritifcal Facial Detection, Separating the Real Faces from the Artificially Generated
-
----
+# Project Proposal: Aritifcal Facial Detection, Separating Real Faces from the Artificially Generated
+#### Udhbhav Gupta & Ante Tonkovic-Capin
 
 ## Problem Statement
 Artifically generated image technology has become increasingly sophisticated, sometimes termed as 'Deep Fakes', allowing the creation of realistic videos and images that can deceive viewers. This is particularly dangerous when it comes to false or misleading representations of individuals. Detecting fake or manipulated images in the case where individuals are artificially generated is crucial to prevent their malicious use in spreading misinformation, identity theft, and other harmful activities. Our project aims to explore the potential of implementing a AI generated detection system for facial images using modern computer vision techniques.
@@ -68,7 +67,4 @@ By exploring solutions to detecting potential misleading AI generated images, ou
 - For feature-based approach, which features and model should be used and will the approach be effective?
 - Will biases in the available datasets affect results?
 
----
 
-
-**- Udhbhav Gupta & Ante Tonkovic-Capin**
