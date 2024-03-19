@@ -92,8 +92,8 @@ def get_image_dataloaders(dirpath:str, tt_split:float=0.8, batch_size:int=32, im
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader
 
-def run_training(num_epochs:int=10, lr:float=0.005) -> None:
-    """Run the primary training loop using `lr` specified for the `num_epochs` provided."""
+def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None:
+    """Run the primary training loop using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
     from model import FakeFaceDetector
 
     dataset_dir = 'dataset/real_and_fake_face'
@@ -137,11 +137,15 @@ def run_training(num_epochs:int=10, lr:float=0.005) -> None:
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         print(f'Epoch {epoch+1}, Test Accuracy: {correct / total:.4%} ({correct} correct out of {total})')
-    model.train()  # set the model back to training mode        
+    if save_model is not None:
+        torch.save(model.state_dict(), save_model) 
+        print(f"model saved to '{save_model}'")
+    model.train()
+    print(f'finished')
 
 if __name__ == '__main__':
     # inspect_random_image(display_image=True)
-    run_training(num_epochs=20, lr=0.008)
+    run_training(num_epochs=40, lr=0.02, save_model='ffd.pt')
 
 
 """
