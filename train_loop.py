@@ -1,7 +1,7 @@
-import sys
+import sys, time
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +34,7 @@ def inspect_random_image(display_image:bool=False) -> None:
         `None`
     """
     dataset_dir = 'dataset/real_and_fake_face'
-    loader = get_images(dataset_dir, batch_size=1)
+    loader, _ = get_image_dataloaders(dataset_dir, batch_size=1)
     for image, label in loader:
         image, label = image[0], label[0]
         image = torch_tensor_to_numpy(image)
@@ -60,32 +60,37 @@ def get_image_mean_std(dirpath:str) -> tuple[int]:
     mean, std = torch.mean(data_tensor, dim=(0, 1)).mean(), torch.std(data_tensor, dim=(0, 1)).mean()
     return mean, std
 
-def get_images(dirpath:str, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> DataLoader:
+def get_image_dataloaders(dirpath:str, tt_split:float=0.8, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> tuple[DataLoader]:
     """
     Get the images from the specified `dirpath` and return for training after applying transform using `images_mean`, `images_std` and `images_resize`. 
     
     Parameters:
         `dirpath` (str): The target directory for the image dataset
+        `tt_split` (float): The train-test split to use for splitting the dataset, default is `0.8` for 80-20 split.
         `batch_size` (int): The batch size to use for loading data.
         `images_mean` (float): The mean to use for transform value, default is `0.442756` calculated from `get_image_mean_std()`.
         `images_std` (float): The std to use for transform value, default is `0.276322` calculated from `get_image_mean_std()`.
         `images_resize` (tuple): The resize to use for transform value, default is `(128, 128)` from estimate.
     
     Returns:
-        `DataLoader`: A dataloader constructed using the transformation specified.
+        `DataLoader` (tuple[DataLoader]): A tuple of dataloaders constructed using the transformation specified in the format of
+            `(train_loader, test_loader)`            
 
     Note:
         Label of `1` signifies a real face, and `0` signifies a fake face.
     """
-    # Define the transformation
     transform = transforms.Compose([
         transforms.Resize(images_resize),
         transforms.ToTensor(),
         transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
     ])    
-    data = datasets.ImageFolder(root=dirpath, transform=transform)
-    loader = DataLoader(data, batch_size=batch_size, shuffle=True)    
-    return loader
+    dataset = datasets.ImageFolder(root=dirpath, transform=transform)
+    train_size = int(tt_split * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    return train_loader, test_loader
 
 def run_training(num_epochs:int=10, lr:float=0.005) -> None:
     """Run the primary training loop using `lr` specified for the `num_epochs` provided."""
@@ -94,7 +99,7 @@ def run_training(num_epochs:int=10, lr:float=0.005) -> None:
     dataset_dir = 'dataset/real_and_fake_face'
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
-    train_loader = get_images(dataset_dir, batch_size=32, images_resize=(64,64))
+    train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(64,64))
 
     # Check if cuda is found and available
     print(f"cuda device available: {has_cuda}")
@@ -103,7 +108,9 @@ def run_training(num_epochs:int=10, lr:float=0.005) -> None:
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    # Training loop
     for epoch in range(num_epochs):
+        start_time = time.time()  # Start timer for epoch        
         running_loss = 0.0
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)            
@@ -114,11 +121,27 @@ def run_training(num_epochs:int=10, lr:float=0.005) -> None:
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
-        print(f"Epoch {epoch+1}, Loss: {running_loss/len(train_loader)}")   
+        epoch_time = time.time() - start_time             
+        print(f"Epoch {epoch+1}, Loss: {(running_loss/len(train_loader)):.6f}, Time: {epoch_time:.6f}")   
+
+    # Test the model
+    model.eval()  # set the model to evaluation mode
+    with torch.no_grad():
+        correct = 0
+        total = 0
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            labels = labels.view(-1, 1)
+            outputs = model(images)
+            predicted = (outputs.data > 0.5).float()
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+        print(f'Epoch {epoch+1}, Test Accuracy: {correct / total:.4%} ({correct} correct out of {total})')
+    model.train()  # set the model back to training mode        
 
 if __name__ == '__main__':
     # inspect_random_image(display_image=True)
-    run_training(num_epochs=10, lr=0.5e-2)
+    run_training(num_epochs=20, lr=0.008)
 
 
 """
