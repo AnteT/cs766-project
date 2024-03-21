@@ -6,6 +6,7 @@ from torchvision import datasets, transforms
 from torchvision.models import vision_transformer
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 def torch_tensor_to_numpy(torch_tensor:torch.Tensor) -> np.ndarray:
     """Converts the input `torch_tensor` into a `numpy.ndarray` using an image transformation to transpose `(Channels, Height, Width)` into `(Height, Width, Channels)`."""
@@ -105,26 +106,44 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
     # Check if cuda is found and available
     print(f"cuda device available: {has_cuda}")
 
-    # model = FakeFaceDetector().to(device=device)
-    model = vision_transformer.vit_b_16(weights=None, num_classes=2).to(device=device)
+    if has_cuda:
+        gpu_id = 6
+        device = torch.device(f'cuda:{gpu_id}')
+        print(f"Using GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}")
+    
+    model_exists = os.path.exists(save_model)
+
+    model = vision_transformer.vit_b_16(weights=None, num_classes=2)
+    if model_exists:
+        state_dict = torch.load(save_model)
+        if 'module.' in list(state_dict.keys())[0]:
+            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        model.load_state_dict(state_dict)
+    model = model.to(device=device)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
+    total_params = sum(p.numel() for p in model.parameters())
+    print("Total number of parameters:", total_params)
+
     # Training loop
-    for epoch in range(num_epochs):
-        start_time = time.time()  # Start timer for epoch        
-        running_loss = 0.0
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)            
-            # labels = labels.view(-1, 1) # reshape for functional sigmoid activation     
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels.long())
-            loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
-        epoch_time = time.time() - start_time             
-        print(f"Epoch {epoch+1}, Loss: {(running_loss/len(train_loader)):.6f}, Time: {epoch_time:.6f}")   
+    if not model_exists:
+        print(f"Training for {num_epochs} epochs with learning rate {lr}")
+        for epoch in range(num_epochs):
+            start_time = time.time()  # Start timer for epoch        
+            running_loss = 0.0
+            for inputs, labels in train_loader:
+                inputs, labels = inputs.to(device), labels.to(device)            
+                # labels = labels.view(-1, 1) # reshape for functional sigmoid activation     
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = criterion(outputs, labels.long())
+                loss.backward()
+                optimizer.step()
+                running_loss += loss.item()
+            epoch_time = time.time() - start_time             
+            print(f"Epoch {epoch+1}, Loss: {(running_loss/len(train_loader)):.6f}, Time: {epoch_time:.6f}")   
 
     # Test the model
     model.eval()  # set the model to evaluation mode
@@ -133,36 +152,17 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
         total = 0
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
-            labels = labels.view(-1, 1)
             outputs = model(images)
-            _, predicted = torch.max(outputs, 1)
+            _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-        print(f'Epoch {epoch+1}, Test Accuracy: {correct / total:.4%} ({correct} correct out of {total})')
-    if save_model is not None:
+        print(f'Test Accuracy: {correct / total:.4%} ({correct} correct out of {total})')
+    if not model_exists and save_model is not None:
         torch.save(model.state_dict(), save_model) 
-        print(f"model saved to '{save_model}'")
+        print(f"model parameters saved to '{save_model}'")
     model.train()
     print(f'finished')
 
 if __name__ == '__main__':
     # inspect_random_image(display_image=True)
-    run_training(num_epochs=10, lr=0.02, save_model='ffd.pt')
-
-
-"""
-Output of first training loop at lr 0.005 for 10 epochs:
-
-cuda device available: True
-Epoch 1, Loss: 0.8924276977777481
-Epoch 2, Loss: 0.6784730423241854
-Epoch 3, Loss: 0.6633029114454985
-Epoch 4, Loss: 0.655360559001565
-Epoch 5, Loss: 0.6469162441790104
-Epoch 6, Loss: 0.6355789313092828
-Epoch 7, Loss: 0.624498943798244
-Epoch 8, Loss: 0.6139185233041644
-Epoch 9, Loss: 0.5922861993312836
-Epoch 10, Loss: 0.570208353921771
-
-"""
+    run_training(num_epochs=20, lr=0.03, save_model='ffd2.pt')
