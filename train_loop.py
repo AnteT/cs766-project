@@ -3,6 +3,7 @@ import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
+from torchvision.models import vision_transformer
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -99,13 +100,14 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
     dataset_dir = 'dataset/real_and_fake_face'
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
-    train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(64,64))
+    train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(224,224))
 
     # Check if cuda is found and available
     print(f"cuda device available: {has_cuda}")
 
-    model = FakeFaceDetector().to(device=device)
-    criterion = nn.BCELoss()
+    # model = FakeFaceDetector().to(device=device)
+    model = vision_transformer.vit_b_16(weights=None, num_classes=2).to(device=device)
+    criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # Training loop
@@ -114,10 +116,10 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
         running_loss = 0.0
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)            
-            labels = labels.view(-1, 1) # reshape for functional sigmoid activation     
+            # labels = labels.view(-1, 1) # reshape for functional sigmoid activation     
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = criterion(outputs, labels.float())
+            loss = criterion(outputs, labels.long())
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
@@ -133,7 +135,7 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
             images, labels = images.to(device), labels.to(device)
             labels = labels.view(-1, 1)
             outputs = model(images)
-            predicted = (outputs.data > 0.5).float()
+            _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
         print(f'Epoch {epoch+1}, Test Accuracy: {correct / total:.4%} ({correct} correct out of {total})')
@@ -145,7 +147,7 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
 
 if __name__ == '__main__':
     # inspect_random_image(display_image=True)
-    run_training(num_epochs=40, lr=0.02, save_model='ffd.pt')
+    run_training(num_epochs=10, lr=0.02, save_model='ffd.pt')
 
 
 """
