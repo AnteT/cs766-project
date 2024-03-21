@@ -24,6 +24,7 @@ Project
    │
    ├── face_isolation
    │   ├── __init__.py
+   │   ├── face_extraction.py
    │   └── face_isolation.py
    │
    ├── requirements.txt
