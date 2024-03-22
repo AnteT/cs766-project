@@ -2,7 +2,7 @@ You'll need to provide a brief summary of current progress, including your curre
 
 Suggested Format
 Suggested Length: 4/5 pages
- 
+
 Title, Group Members
 
 1. Introduction [UD-AT]
@@ -21,6 +21,8 @@ Present baseline algorithms considered for solving the problem and reasons behin
 Explain the methodology adopted for the project, including any modifications made to the baseline algorithms.
 Discuss any preprocessing steps applied to the dataset.
 Specify the evaluation metrics chosen to assess the performance of the algorithms.
++ explore difference methodology in preprocessing/resizing images during training
++ explore color/b&w
 
 4. Initial Results [AT]
 Provide an analysis of the initial results obtained.
@@ -35,4 +37,3 @@ Describe the timeline for each planned activity, including milestones and deadli
 6. Member contributions [UD-AT]
 Specify the contributions of each member.
 Short statement saying "all members contributed equally to the various components of the project" is acceptable.
- 
