@@ -102,7 +102,7 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
     train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(64,64))
 
     # Check if cuda is found and available
-    print(f"cuda device available: {has_cuda}")
+    print(f"cuda device available: {has_cuda} ({torch.version.cuda})")
 
     model = FakeFaceDetector().to(device=device)
     criterion = nn.BCELoss()

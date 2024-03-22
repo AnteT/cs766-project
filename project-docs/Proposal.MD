@@ -50,14 +50,14 @@ Our project will follow these steps to research the problem:
 ---
 
 ## Timetable
-| **Phase**                | **Duration** |
-|--------------------------|--------------|
-| Data Collection                   | 2 weeks      |
-| Preprocessing                     | 1 week       |
-| Model Selection & Training        | 3 weeks      |
-| Evaluation and Testing            | 1 weeks      |
-|Feature based approach             | Time permitting |
-| Documentation, Report, Webpage    | 1 week       |
+| **Phase**                          | **Duration**    |
+|------------------------------------|-----------------|
+| Data Collection                    | 2 weeks         |
+| Preprocessing                      | 1 week          |
+| Model Selection & Training         | 3 weeks         |
+| Evaluation and Testing             | 1 weeks         |
+| Feature based approach             | Time permitting |
+| Documentation, Report, Webpage     | 1 week          |
 
 ## Conclusion
 By exploring solutions to detecting potential misleading AI generated images, our project aims to contribute to a safer digital environment. We believe that combining modern computer vision techniques with rigorous evaluation can lead to an effective solution to help combat the spread of misinformation and protect the integrity of visual content.
