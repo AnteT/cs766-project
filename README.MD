@@ -11,11 +11,21 @@ Aritifcal Facial Detection, Separating Real Faces from the Artificially Generate
 Project
    ├── README.MD
    ├── dataset
-   │   └── real_and_fake_face
-   │       ├── fake
-   │       │   └── images...
-   │       └── real
-   │          └── images...
+   │     └── 140k
+   │          ├── real_vs_fake
+   │          │   └── real-vs-fake
+   │          │       ├── test
+   │          │       │   ├── fake
+   │          │       │   └── real
+   │          │       ├── train
+   │          │       │   ├── fake
+   │          │       │   └── real
+   │          │       └── valid
+   │          │           ├── fake
+   │          │           └── real
+   │          ├── test.csv
+   │          ├── train.csv
+   │          └── valid.csv
    │
    ├── model.py
    ├── project-docs

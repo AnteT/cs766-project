@@ -1,7 +1,7 @@
 import sys, time
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
@@ -92,22 +92,37 @@ def get_image_dataloaders(dirpath:str, tt_split:float=0.8, batch_size:int=32, im
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader
 
+def get_140k_image_dataloaders(total_size:int=20_000, tt_split:float=0.8, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> tuple[DataLoader]:
+    DATASET_DIR = 'dataset/140k/real_vs_fake/real-vs-fake/train'
+    transform = transforms.Compose([
+        transforms.Resize(images_resize),
+        transforms.ToTensor(),
+        transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
+    ])   
+    dataset = datasets.ImageFolder(root=DATASET_DIR, transform=transform)
+    indices = torch.randperm(len(dataset))[:total_size]
+    subset = Subset(dataset, indices)
+    train_size = round(tt_split * len(subset))  # 80% for training
+    test_size = len(subset) - train_size  # 20% for testing
+    train_dataset, test_dataset = random_split(subset, [train_size, test_size])
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    return train_dataloader, test_dataloader
+
 def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None:
     """Run the primary training loop using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
     from model import FakeFaceDetector
 
-    dataset_dir = 'dataset/real_and_fake_face'
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
-    train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(64,64))
-
+    # dataset_dir = 'dataset/real_and_fake_face'
+    # train_loader, test_loader = get_image_dataloaders(dataset_dir, tt_split=0.8, batch_size=32, images_resize=(64,64))
+    train_loader, test_loader = get_140k_image_dataloaders(tt_split=0.8, batch_size=32, images_resize=(64,64))
     # Check if cuda is found and available
     print(f"cuda device available: {has_cuda} ({torch.version.cuda})")
-
     model = FakeFaceDetector().to(device=device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
-
     # Training loop
     for epoch in range(num_epochs):
         start_time = time.time()  # Start timer for epoch        
@@ -145,13 +160,70 @@ def run_training(num_epochs:int=10, lr:float=0.005, save_model:str=None) -> None
 
 if __name__ == '__main__':
     # inspect_random_image(display_image=True)
-    run_training(num_epochs=40, lr=0.02, save_model='ffd.pt')
+    # run_training(num_epochs=50, lr=0.001, save_model='ffd-e50-lr1e3.pt') # 79.5% accuracy using lr: 1e-3, epochs: 50, total_size: 10_000, tt_split: 0.8, image_resize: (64,64)
+    run_training(num_epochs=200, lr=0.0003, save_model='ffd-e200-lr3e4.pt') # run next total_size: 20_000
 
 
 """
+Output of 140k dataset using CNN at lr 1e-3 for 50 epochs, first 12 epochs:
+
+cuda device available: True (12.1)
+Epoch 1, Loss: 0.676425, Time: 39.416640
+Epoch 2, Loss: 0.590187, Time: 28.932080
+Epoch 3, Loss: 0.529170, Time: 28.179731
+Epoch 4, Loss: 0.484675, Time: 34.000679
+Epoch 5, Loss: 0.436741, Time: 37.053384
+Epoch 6, Loss: 0.395150, Time: 29.924166
+Epoch 7, Loss: 0.355435, Time: 29.926557
+Epoch 8, Loss: 0.310470, Time: 30.033522
+Epoch 9, Loss: 0.278954, Time: 29.802948
+Epoch 10, Loss: 0.235843, Time: 30.110958
+Epoch 11, Loss: 0.195993, Time: 29.975606
+Epoch 12, Loss: 0.159638, Time: 29.802055
+Epoch 13, Loss: 0.139127, Time: 30.280042
+Epoch 14, Loss: 0.101585, Time: 30.072499
+Epoch 15, Loss: 0.084098, Time: 31.773986
+Epoch 16, Loss: 0.074306, Time: 29.259795
+Epoch 17, Loss: 0.048517, Time: 28.815021
+Epoch 18, Loss: 0.040382, Time: 35.613732
+Epoch 19, Loss: 0.074973, Time: 36.983704
+Epoch 20, Loss: 0.042922, Time: 32.102381
+Epoch 21, Loss: 0.024969, Time: 29.255951
+Epoch 22, Loss: 0.042301, Time: 30.789441
+Epoch 23, Loss: 0.030716, Time: 30.533591
+Epoch 24, Loss: 0.064482, Time: 29.873001
+Epoch 25, Loss: 0.011320, Time: 30.064110
+Epoch 26, Loss: 0.007316, Time: 29.012978
+Epoch 27, Loss: 0.002674, Time: 28.804330
+Epoch 28, Loss: 0.001354, Time: 28.964646
+Epoch 29, Loss: 0.000855, Time: 28.601851
+Epoch 30, Loss: 0.000682, Time: 28.229314
+Epoch 31, Loss: 0.000544, Time: 29.412738
+Epoch 32, Loss: 0.000450, Time: 27.911226
+Epoch 33, Loss: 0.000384, Time: 28.122136
+Epoch 34, Loss: 0.000321, Time: 27.650081
+Epoch 35, Loss: 0.000277, Time: 27.728242
+Epoch 36, Loss: 0.000239, Time: 29.589487
+Epoch 37, Loss: 0.000207, Time: 31.140086
+Epoch 38, Loss: 0.000176, Time: 31.100951
+Epoch 39, Loss: 0.000151, Time: 31.425896
+Epoch 40, Loss: 0.000131, Time: 32.396354
+Epoch 41, Loss: 0.000113, Time: 29.972846
+Epoch 42, Loss: 0.000098, Time: 29.210037
+Epoch 43, Loss: 0.000086, Time: 29.933231
+Epoch 44, Loss: 0.000073, Time: 30.755196
+Epoch 45, Loss: 0.000063, Time: 31.636939
+Epoch 46, Loss: 0.000055, Time: 41.926067
+Epoch 47, Loss: 0.000048, Time: 43.543257
+Epoch 48, Loss: 0.000041, Time: 43.595753
+Epoch 49, Loss: 0.000036, Time: 43.090540
+Epoch 50, Loss: 0.000031, Time: 33.583533
+Epoch 50, Test Accuracy: 79.5000% (1590 correct out of 2000)
+model saved to 'ffd-e50-lr1e3.pt'
+
 Output of first training loop at lr 0.005 for 10 epochs:
 
-cuda device available: True
+cuda device available: True (12.1)
 Epoch 1, Loss: 0.8924276977777481
 Epoch 2, Loss: 0.6784730423241854
 Epoch 3, Loss: 0.6633029114454985

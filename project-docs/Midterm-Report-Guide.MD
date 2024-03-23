@@ -23,6 +23,7 @@ Discuss any preprocessing steps applied to the dataset.
 Specify the evaluation metrics chosen to assess the performance of the algorithms.
 + explore difference methodology in preprocessing/resizing images during training
 + explore color/b&w
++ https://github.com/EricGzq/Hybrid-Fake-Face-Dataset?tab=readme-ov-file
 
 4. Initial Results [AT]
 Provide an analysis of the initial results obtained.
@@ -33,6 +34,7 @@ Compare the performance of baseline algorithms with expected outcomes.
 Outline the remaining tasks to be completed before the final report submission.
 Specify any additional experiments or refinements planned for the algorithms.
 Describe the timeline for each planned activity, including milestones and deadlines.
++ additional datasets based on results
 
 6. Member contributions [UD-AT]
 Specify the contributions of each member.
