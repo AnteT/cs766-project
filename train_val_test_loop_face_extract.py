@@ -20,23 +20,25 @@ def torch_tensor_to_numpy(torch_tensor:torch.Tensor) -> np.ndarray:
             )
     return torch_tensor.numpy().transpose((1,2,0))
 
-def get_image_dataloaders(max_samples:int=20_000, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> tuple[DataLoader]:
+def get_image_dataloaders(max_samples:int=20_000, feature_extract:bool=False, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> tuple[DataLoader]:
     """Returns `140k/` dataset in the format: ``(train_loader, validation_loader, test_loader)``"""
     dataset_dir = DATASET_DIR
     train_dir = f"{dataset_dir}/train"
     test_dir = f"{dataset_dir}/test"
     valid_dir = f"{dataset_dir}/valid"
     
-    # Original transform operations
-    # transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor(),transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))])
-
-    # Define the face extraction transform
-    face_extraction_transform = FaceExtractionTransform(images_resize)
-
-    transform = transforms.Compose([
-        face_extraction_transform,
-        transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
-    ])
+    if feature_extract:
+        transform = transforms.Compose([
+            FaceExtractionTransform(images_resize)
+            # transforms.ToTensor(),
+            # transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.Resize(images_resize),
+            transforms.ToTensor(),
+            transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
+        ])
 
     train_dataset = datasets.ImageFolder(root=train_dir, transform=transform)
     test_dataset = datasets.ImageFolder(root=test_dir, transform=transform)
@@ -49,15 +51,15 @@ def get_image_dataloaders(max_samples:int=20_000, batch_size:int=32, images_resi
     valid_dataloader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False)
     return train_dataloader, valid_dataloader, test_dataloader
 
-def run_training(max_samples:int=10_000, num_epochs:int=10, lr:float=0.005, save_model:bool=True) -> None:
-    """Run the primary training loop with `max_samples` using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
+def run_training(max_samples:int=10_000, num_epochs:int=10, lr:float=0.005, feature_extract:bool=False, save_model:bool=True) -> None:
+    """Run the primary training loop with `max_samples` using `lr` specified for the `num_epochs` provided and applying facial feature extraction if specified, optionally saving model to `save_model` if provided."""
     report_batch = {'Epoch':'int', 'Batch':'int', 'Type':'str','Loss':'float'}
     sdm_batch = SQLDataModel(dtypes=report_batch)
     report_epoch = {'Epoch':'int', 'Train Loss':'float', 'Validation Loss':'float', 'Validation Accuracy':'float', 'Time (seconds)':'float'}
     sdm = SQLDataModel(dtypes=report_epoch)
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
-    train_loader, valid_loader, test_loader = get_image_dataloaders(max_samples=max_samples, batch_size=32, images_resize=(64,64))
+    train_loader, valid_loader, test_loader = get_image_dataloaders(max_samples=max_samples, feature_extract=feature_extract, batch_size=32, images_resize=(64,64))
     print(f"cuda device available: {has_cuda}")
     
     model = FakeFaceDetector().to(device=device)
@@ -133,7 +135,8 @@ def run_training(max_samples:int=10_000, num_epochs:int=10, lr:float=0.005, save
         print(f'Test Loss: {(test_loss/len(test_loader)):.4f}, Test Accuracy: {correct / total:.2%} ({correct} of {total})')
 
     if save_model:
-        model_label = f"ffd-s{max_samples}-e{num_epochs}-lr{lr:.0e}.pt"
+        model_prefix = 'ffd' if not feature_extract else 'ffd+fe'
+        model_label = f"{model_prefix}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.pt"
         torch.save(model.state_dict(), model_label) 
         print(f"model saved to '{model_label}'")
     model.train()
@@ -153,5 +156,6 @@ def display_random_image():
         break  # Break after displaying one random image
 
 if __name__ == '__main__':
-    # run_training(max_samples=5_000, num_epochs=80, lr=1e-4, save_model=True) # do 1e-4 next
-    display_random_image()
+    run_training(max_samples=1_000, num_epochs=20, lr=1e-3, feature_extract=True, save_model=True) # Test Loss: 0.8390, Test Accuracy: 66.80% (668 of 1000)
+    # run_training(max_samples=1_000, num_epochs=20, lr=1e-3, feature_extract=False, save_model=True) # Test Loss: 1.3636, Test Accuracy: 68.10% (681 of 1000)
+    # display_random_image()

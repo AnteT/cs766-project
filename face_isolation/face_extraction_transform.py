@@ -24,7 +24,7 @@ class FaceExtraction(object):
             face = cv2.resize(face, self.reshape_size)
             return face
         except Exception as e:
-            print(f"failed to extract face because of: '{e}'")
+            # print(f"failed to extract face because of: '{e}'")
             raise ValueError
 
 class FaceExtractionTransform:
@@ -38,8 +38,8 @@ class FaceExtractionTransform:
             img = np.array(img)
         try:
             face = self.mtcnn.extract_face(img)
-        except ValueError:
-            return cv2.resize(img, self.reshape_size)
+        except Exception:
+            face = None
         if face is not None:
             # face = cv2.resize(face, self.reshape_size, interpolation=cv2.INTER_NEAREST)
             face = cv2.resize(face, self.reshape_size)
@@ -48,5 +48,7 @@ class FaceExtractionTransform:
             face = torch.tensor(face, dtype=torch.float32).permute(2, 0, 1) / 255.0
             return face
         else:
+            img = cv2.resize(img, self.reshape_size)
             # Return original image if face is not detected
-            return cv2.resize(img, self.reshape_size)
+            img = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1) / 255.0
+            return img
