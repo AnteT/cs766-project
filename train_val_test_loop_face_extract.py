@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split, Subset
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import numpy as np
-from model import FakeFaceDetector
+from model import FakeFaceDetectorFE
 from SQLDataModel import SQLDataModel
 
 DATASET_DIR = 'dataset/140k/real_vs_fake/real-vs-fake/'
@@ -19,31 +19,31 @@ def torch_tensor_to_numpy(torch_tensor:torch.Tensor) -> np.ndarray:
             )
     return torch_tensor.numpy().transpose((1,2,0))
 
-def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5) -> tuple[DataLoader]:
+def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, normalize_tensors:bool=True, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5, val_subset:float=0.2) -> tuple[DataLoader]:
     """Returns `140k/` dataset in the format: ``(train_loader, validation_loader, test_loader)``"""
     dataset_dir = DATASET_DIR if not use_feature_extract else PROCESSED_DIR
 
     train_dir = f"{dataset_dir}/train"
     valid_dir = f"{dataset_dir}/valid"
     test_dir = f"{dataset_dir}/test"
+    
+    if normalize_tensors:
+        transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor(),transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))])
+    else:
+        transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor()])
 
-    transform = transforms.Compose([
-        transforms.Resize(images_resize),
-        transforms.ToTensor(),
-        transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))
-    ])
     train_dataset = datasets.ImageFolder(root=train_dir, transform=transform)
     test_dataset = datasets.ImageFolder(root=test_dir, transform=transform)
     valid_dataset = datasets.ImageFolder(root=valid_dir, transform=transform)
     train_subset = Subset(train_dataset, indices=torch.randperm(len(train_dataset))[:min(max_samples, len(train_dataset))])
     test_subset = Subset(test_dataset, indices=torch.randperm(len(test_dataset))[:min(max_samples, len(test_dataset))])
-    valid_subset = Subset(valid_dataset, indices=torch.randperm(len(valid_dataset))[:min(max_samples, len(valid_dataset))])
+    valid_subset = Subset(valid_dataset, indices=torch.randperm(len(valid_dataset))[:min(round(max_samples*val_subset), len(valid_dataset))])
     train_dataloader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     test_dataloader = DataLoader(test_subset, batch_size=batch_size, shuffle=False)
     valid_dataloader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False)
     return train_dataloader, valid_dataloader, test_dataloader
 
-def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(64,64), num_epochs:int=10, lr:float=0.005, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False) -> None:
+def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160), num_epochs:int=10, lr:float=0.005, val_subset:float=0.2, normalize_tensors:bool=True, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False) -> None:
     """Run the primary training loop with `max_samples` using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
     report_batch = {'Epoch':'int', 'Batch':'int', 'Type':'str','Loss':'float'}
     sdm_batch = SQLDataModel(dtypes=report_batch)
@@ -51,10 +51,10 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(64,64), n
     sdm = SQLDataModel(dtypes=report_epoch)
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
-    train_loader, valid_loader, test_loader = get_image_dataloaders(max_samples=max_samples, use_feature_extract=use_feature_extract, batch_size=32, images_resize=images_resize)
+    train_loader, valid_loader, test_loader = get_image_dataloaders(max_samples=max_samples, normalize_tensors=normalize_tensors, use_feature_extract=use_feature_extract, batch_size=32, images_resize=images_resize, val_subset=val_subset)
     print(f"cuda device available: {has_cuda}")
     
-    model = FakeFaceDetector().to(device=device)
+    model = FakeFaceDetectorFE().to(device=device)
     criterion = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     train_batch_idx, val_batch_idx = 0, 0
@@ -101,9 +101,9 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(64,64), n
         epoch_data = [epoch+1, round(training_loss,6), round(validation_loss,6), round(validation_accuracy,6), round(epoch_time,6)]
         sdm[epoch] = epoch_data
     print('-'*120)
-    print(f'Training Finished ({max_samples} samples, {num_epochs} epochs, learing rate {lr:.0e})')
-    print('Batch report data:')
-    print(sdm_batch)
+    print(f'Training Finished (samples: {max_samples}, epochs: {num_epochs}, learing rate: {lr:.0e}, normalized tensors: {normalize_tensors}, used feature extraction: {use_feature_extract})')
+    if save_batch_report:
+        print(sdm_batch)
     print('Epoch report data:')
     print(sdm)
     report_label = f"s{max_samples}-e{num_epochs}-lr{lr:.0e}.csv" if not use_feature_extract else f"s{max_samples}-e{num_epochs}-lr{lr:.0e}+fe.csv"
@@ -135,5 +135,14 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(64,64), n
     print(f'finished')
 
 if __name__ == '__main__':
-    # run_training(max_samples=5_000, images_resize=(64,64), num_epochs=80, lr=1e-4, save_model=True) # do 1e-4 next
-    run_training(max_samples=5_000, use_feature_extract=True, images_resize=(64,64), num_epochs=4, lr=1e-4, save_model=True) # do 1e-4 next
+    run_training(
+        max_samples=5_000
+        ,use_feature_extract=True
+        ,normalize_tensors=True
+        ,images_resize=(160,160)
+        ,num_epochs=40
+        ,lr=1e-4
+        ,save_model=True
+        ,save_epoch_report=True
+    ) 
+    # Result: Test Loss: 1.1735, Test Accuracy: 75.74% (3787 of 5000)

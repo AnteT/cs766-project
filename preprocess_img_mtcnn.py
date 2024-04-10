@@ -34,12 +34,12 @@ def preprocess_image_directory_and_save_output(input_dir:str, output_dir:str, su
         preprocess_image(image_path, mtcnn, output_dir)        
 
 remaining_dirs = [
-    (f"{train_dir}/fake",'dataset/processed/train/fake', 10_000)
-    ,(f"{train_dir}/real",'dataset/processed/train/real', 10_000)
-    ,(f"{test_dir}/fake",'dataset/processed/test/fake', 5_000)
-    ,(f"{test_dir}/real",'dataset/processed/test/real', 5_000)
-    ,(f"{valid_dir}/fake",'dataset/processed/valid/fake', 5_000)
-    ,(f"{valid_dir}/real",'dataset/processed/valid/real', 5_000)
+    (f"{train_dir}/fake",'dataset/processed/train/fake', 50_000)
+    ,(f"{train_dir}/real",'dataset/processed/train/real', 50_000)
+    # ,(f"{test_dir}/fake",'dataset/processed/test/fake', 5_000)
+    # ,(f"{test_dir}/real",'dataset/processed/test/real', 5_000)
+    # ,(f"{valid_dir}/fake",'dataset/processed/valid/fake', 5_000)
+    # ,(f"{valid_dir}/real",'dataset/processed/valid/real', 5_000)
 ]
 
 for INPUT_DIR, OUTPUT_DIR, ARB_LIMIT in remaining_dirs:
