@@ -192,8 +192,10 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160),
 
 
 if __name__ == '__main__':
-    # Test Accuracy: 80.08% (4004 of 5000), Test Loss: 0.7560 (samples: 5000, epochs: 20, learing rate: 1e-04, normalized tensors: True, used feature extraction: True) 
-    # Test Accuracy: 74.22% (3711 of 5000), Test Loss: 0.8928 (samples: 5000, epochs: 20, learing rate: 1e-04, normalized tensors: True, used feature extraction: False) 
-    run_training(training_label='compare+leaky',max_samples=10_000,use_feature_extract=False,normalize_tensors=True,images_resize=(160,160),num_epochs=10,lr=1e-4,save_model=True,save_epoch_report=True) 
+    # NOTE: Best result:
+    # Test Accuracy: 83.55% (8355 of 10000), Test Loss: 0.4551 (samples: 10000, epochs: 10, learing rate: 1e-04, normalized tensors: True, used feature extraction: False)
+    FEATURE_EXTRACT = True
+    NORMALIZE_TENSORS = True
+    run_training(training_label='compare+leaky',max_samples=10_000,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=10,lr=1e-4,save_model=True,save_epoch_report=True) 
     
     # inspect_random_image(display_image=True, use_feature_extract=False, normalize=True, seed=4)
