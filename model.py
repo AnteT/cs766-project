@@ -31,11 +31,14 @@ class FakeFaceDetectorFE(nn.Module):
         self.fc2 = nn.Linear(128, 1)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
+        # x = F.relu(self.conv1(x))
+        x = F.leaky_relu(self.conv1(x)) # testing leaky relu
         x = F.max_pool2d(x, 2, 2)
-        x = F.relu(self.conv2(x))
+        # x = F.relu(self.conv2(x))
+        x = F.leaky_relu(self.conv2(x)) # testing leaky relu
         x = F.max_pool2d(x, 2, 2)
         x = x.view(-1, 64*38*38)  # Changed size
-        x = F.relu(self.fc1(x))
+        # x = F.relu(self.fc1(x))
+        x = F.leaky_relu(self.fc1(x)) # testing leaky relu
         x = self.fc2(x)
         return torch.sigmoid(x) 

@@ -1,8 +1,10 @@
+from typing import Literal
 import sys, time
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader, random_split, Subset
 from torchvision import datasets, transforms
+from torchvision.transforms import v2
 import matplotlib.pyplot as plt
 import numpy as np
 from model import FakeFaceDetectorFE
@@ -17,9 +19,59 @@ def torch_tensor_to_numpy(torch_tensor:torch.Tensor) -> np.ndarray:
         raise ValueError(
             f"Invalid dimensions '{arg_ndim}', value for `torch_tensor` must have 3 dimensions representing `(C, H, W)` to be able to convert into numpy array"
             )
-    return torch_tensor.numpy().transpose((1,2,0))
+    arr = torch_tensor.numpy().transpose((1,2,0))
+    # arr = (arr * 255).astype(np.uint8)
+    return arr
 
-def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, normalize_tensors:bool=True, batch_size:int=32, images_resize:tuple=(128,128), images_mean:float=0.5, images_std:float=0.5, val_subset:float=0.2) -> tuple[DataLoader]:
+def inspect_random_image(display_image:bool=False, use_feature_extract:bool=False, normalize:bool=False, seed:int=42) -> None:
+    """
+    Inspects a randomly selected `image` for debug information, printing the properties referenced below:
+
+    Parameters:
+        `display_image` (bool): If the randomly selected image should be displayed.
+        
+    Properties inspected:
+        `shape`: from `image.shape` representing the shape of the input image.
+        `dtype`: from `image.dtype` representing image value data type.
+        `max_channel`: from `np.amax(image, axis=(0, 1))` as max values of each input channel.
+            `max_r`: from `max_channel[0]` as red channel. 
+            `max_g`: from `max_channel[1]` as green channel. 
+            `max_b`: from `max_channel[2]` as blue channel. 
+        `label`: from dataset representing real or fake image.
+
+    Returns:
+        `None`
+    """
+    torch.manual_seed(seed)
+    loader, _, _ = get_image_dataloaders(1, use_feature_extract=use_feature_extract,batch_size=1,normalize_tensors=normalize)
+    for image, label in loader:
+        image, label = image[0], label[0]
+        image = torch_tensor_to_numpy(image)
+        shape, dtype = image.shape, image.dtype
+        min_r, min_g, min_b = np.around(np.amin(image, axis=(0, 1)),2)
+        avg_r, avg_g, avg_b = np.around(np.mean(image, axis=(0, 1)),2)
+        max_r, max_g, max_b = np.around(np.amax(image, axis=(0, 1)),2)
+        print(f"image {shape = } {dtype}")
+        print(f"{min_r = }, {avg_r = }, {max_r = }")
+        print(f"{min_g = }, {avg_g = }, {max_g = }")
+        print(f"{min_b = }, {avg_b = }, {max_b = }")
+        print(f"{label = } ({'real' if label else 'fake'})")
+        if display_image:
+            image = (image * 255).astype(np.uint8)
+            cdtype = image.dtype
+            print(f'image cast {dtype} -> {cdtype}')
+            min_r, min_g, min_b = np.around(np.amin(image, axis=(0, 1)),2)
+            avg_r, avg_g, avg_b = np.around(np.mean(image, axis=(0, 1)),2)
+            max_r, max_g, max_b = np.around(np.amax(image, axis=(0, 1)),2)
+            print(f"{min_r = }, {avg_r = }, {max_r = }")
+            print(f"{min_g = }, {avg_g = }, {max_g = }")
+            print(f"{min_b = }, {avg_b = }, {max_b = }")            
+            plt.title(f"label of image: {label} ({'real' if label else 'fake'})")
+            plt.imshow(image)
+            plt.show()
+        return
+
+def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, normalize_tensors:bool=False, batch_size:int=32, images_resize:tuple=(160,160), images_mean:float=0.5, images_std:float=0.5, val_subset:float=0.2) -> tuple[DataLoader]:
     """Returns `140k/` dataset in the format: ``(train_loader, validation_loader, test_loader)``"""
     dataset_dir = DATASET_DIR if not use_feature_extract else PROCESSED_DIR
 
@@ -28,9 +80,16 @@ def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False
     test_dir = f"{dataset_dir}/test"
     
     if normalize_tensors:
-        transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor(),transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))])
+        # transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor(),transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))])
+        transform = v2.Compose([v2.ToImage()
+                                ,v2.ToDtype(torch.uint8, scale=True)
+                                ,v2.Resize(size=images_resize, antialias=True)
+                                ,v2.ToDtype(torch.float32, scale=True)
+                                ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
     else:
-        transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor()])
+        # transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor()])
+        transform = v2.Compose([v2.Resize(images_resize),v2.ToTensor()])
 
     train_dataset = datasets.ImageFolder(root=train_dir, transform=transform)
     test_dataset = datasets.ImageFolder(root=test_dir, transform=transform)
@@ -43,7 +102,7 @@ def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False
     valid_dataloader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False)
     return train_dataloader, valid_dataloader, test_dataloader
 
-def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160), num_epochs:int=10, lr:float=0.005, val_subset:float=0.2, normalize_tensors:bool=True, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False) -> None:
+def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160), num_epochs:int=10, lr:float=0.005, val_subset:float=0.2, training_label:str='dev', normalize_tensors:bool=False, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False) -> None:
     """Run the primary training loop with `max_samples` using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
     report_batch = {'Epoch':'int', 'Batch':'int', 'Type':'str','Loss':'float'}
     sdm_batch = SQLDataModel(dtypes=report_batch)
@@ -100,13 +159,11 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160),
         print(f'Epoch {epoch+1}, Training Loss: {training_loss:.4f}, Validation Loss: {validation_loss:.4f}, Validation Accuracy: {validation_accuracy:.2%} ({correct} of {total}), Time: {epoch_time:.4f}')
         epoch_data = [epoch+1, round(training_loss,6), round(validation_loss,6), round(validation_accuracy,6), round(epoch_time,6)]
         sdm[epoch] = epoch_data
-    print('-'*120)
-    print(f'Training Finished (samples: {max_samples}, epochs: {num_epochs}, learing rate: {lr:.0e}, normalized tensors: {normalize_tensors}, used feature extraction: {use_feature_extract})')
+    print(sdm)
     if save_batch_report:
         print(sdm_batch)
-    print('Epoch report data:')
-    print(sdm)
-    report_label = f"s{max_samples}-e{num_epochs}-lr{lr:.0e}.csv" if not use_feature_extract else f"s{max_samples}-e{num_epochs}-lr{lr:.0e}+fe.csv"
+    report_summary = f"""(samples: {max_samples}, epochs: {num_epochs}, learing rate: {lr:.0e}, normalized tensors: {normalize_tensors}, used feature extraction: {use_feature_extract})"""
+    report_label = f"{training_label}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.csv" if not use_feature_extract else f"s{max_samples}-e{num_epochs}-lr{lr:.0e}+fe.csv"
     if save_epoch_report:
         sdm.to_csv(f"results/epoch-report-{report_label}")
     if save_batch_report:
@@ -125,24 +182,18 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160),
             predicted = (outputs.data > 0.5).float()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
-        print(f'Test Loss: {(test_loss/len(test_loader)):.4f}, Test Accuracy: {correct / total:.2%} ({correct} of {total})')
-
+        report_summary = f'Test Accuracy: {correct / total:.2%} ({correct} of {total}), Test Loss: {(test_loss/len(test_loader)):.4f} {report_summary}'
     if save_model:
-        model_label = f"ffd{'+fe' if use_feature_extract else ''}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.pt"
+        model_label = f"{training_label}-ffd{'+fe' if use_feature_extract else ''}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.pt"
         torch.save(model.state_dict(), model_label) 
         print(f"model saved to '{model_label}'")
     model.train()
-    print(f'finished')
+    print(f'Finished with summary:\n{report_summary}')
+
 
 if __name__ == '__main__':
-    run_training(
-        max_samples=5_000
-        ,use_feature_extract=True
-        ,normalize_tensors=True
-        ,images_resize=(160,160)
-        ,num_epochs=40
-        ,lr=1e-4
-        ,save_model=True
-        ,save_epoch_report=True
-    ) 
-    # Result: Test Loss: 1.1735, Test Accuracy: 75.74% (3787 of 5000)
+    # Test Accuracy: 80.08% (4004 of 5000), Test Loss: 0.7560 (samples: 5000, epochs: 20, learing rate: 1e-04, normalized tensors: True, used feature extraction: True) 
+    # Test Accuracy: 74.22% (3711 of 5000), Test Loss: 0.8928 (samples: 5000, epochs: 20, learing rate: 1e-04, normalized tensors: True, used feature extraction: False) 
+    run_training(training_label='compare+leaky',max_samples=10_000,use_feature_extract=False,normalize_tensors=True,images_resize=(160,160),num_epochs=10,lr=1e-4,save_model=True,save_epoch_report=True) 
+    
+    # inspect_random_image(display_image=True, use_feature_extract=False, normalize=True, seed=4)
