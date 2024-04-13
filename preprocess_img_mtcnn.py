@@ -2,8 +2,9 @@ import os, random, glob
 import numpy as np
 from PIL import Image
 from facenet_pytorch import MTCNN
-from torchvision.transforms import ToPILImage
+from torchvision.transforms import ToPILImage, Normalize
 import matplotlib.pyplot as plt
+import torch
 
 DATASET_DIR = 'dataset/140k/real_vs_fake/real-vs-fake/'
 dataset_dir = DATASET_DIR
@@ -16,13 +17,52 @@ def get_mtcnn_model(image_size:int=160) -> MTCNN:
     mtcnn = MTCNN(image_size=image_size, margin=0, min_face_size=20, thresholds=[0.6, 0.7, 0.7], factor=0.709, post_process=False)
     return mtcnn
 
-def preprocess_image(image_path:str, output_dir:str, save_as:str=None, display_image:bool=False):
+def normalize_image(image:torch.Tensor, mean:tuple[float]=[0.485, 0.456, 0.406], std:tuple[float]=[0.229, 0.224, 0.225]) -> torch.Tensor:
+    """
+    Normalize an image using mean and standard deviation.
+    
+    Parameters:
+        ``image`` (numpy.ndarray): Input image.
+        ``mean`` (tuple): Mean values for each channel.
+        ``std`` (tuple): Standard deviation values for each channel.
+        
+    Returns:
+        ``numpy.ndarray``: Normalized image.
+    """
+    image = np.array(image)
+    shape, dtype = image.shape, image.dtype
+    min_r, min_g, min_b = np.around(np.amin(image, axis=(0, 1)),2)
+    avg_r, avg_g, avg_b = np.around(np.mean(image, axis=(0, 1)),2)
+    max_r, max_g, max_b = np.around(np.amax(image, axis=(0, 1)),2)
+    print(f"image {shape = } {dtype}")
+    print(f"{min_r = }, {avg_r = }, {max_r = }")
+    print(f"{min_g = }, {avg_g = }, {max_g = }")
+    print(f"{min_b = }, {avg_b = }, {max_b = }")    
+    image = image.astype(np.float32) / 255.0
+    for i in range(image.shape[2]):
+        image[:, :, i] = (image[:, :, i] - mean[i]) / std[i]
+    normalized_image = np.clip(image, 0, 1)
+    shape, dtype = normalized_image.shape, normalized_image.dtype
+    min_r, min_g, min_b = np.around(np.amin(normalized_image, axis=(0, 1)),2)
+    avg_r, avg_g, avg_b = np.around(np.mean(normalized_image, axis=(0, 1)),2)
+    max_r, max_g, max_b = np.around(np.amax(normalized_image, axis=(0, 1)),2)
+    std_r, std_g, std_b = np.around(np.std(normalized_image, axis=(0, 1)),2)
+    print(f"normalized_image {shape = } {dtype}")
+    print(f"{min_r = }, {avg_r = }, {max_r = }, {std_r = }")
+    print(f"{min_g = }, {avg_g = }, {max_g = }, {std_g = }")
+    print(f"{min_b = }, {avg_b = }, {max_b = }, {std_b = }")       
+    normalized_image = Image.fromarray((normalized_image * 255).astype(np.uint8))
+    return normalized_image
+
+def preprocess_image(image_path:str, output_dir:str, save_as:str=None, display_image:bool=False, normalize:bool=False):
     image = Image.open(image_path)
     mtcnn = get_mtcnn_model()
     face = mtcnn(image)
     if face is not None:
         face = face / face.max()
         face = ToPILImage()(face)
+        if normalize:
+            face = normalize_image(face)
         if display_image:
             plt.imshow(face)
             plt.show()
@@ -69,7 +109,9 @@ def bulk_process_directories(dirs:tuple[str, str, int]) -> None:
         print(f'\nFinished.')
 
 if __name__ == '__main__':
-    fe_input = 'C:/Users/212765834/Desktop/Personal Repos/CS766 - Computer Vision/CS766 - CV Final Project/kiki-and-me-original.png'
-    fe_output = 'C:/Users/212765834/Desktop/Personal Repos/CS766 - Computer Vision/CS766 - CV Final Project/presentation-docs'
-    fe_name = 'C:/Users/212765834/Desktop/Personal Repos/CS766 - Computer Vision/CS766 - CV Final Project/kiki-and-me-result.png'
-    preprocess_image(fe_input, fe_output, save_as=fe_name, display_image=True)
+    fe_input = None # Placeholder
+    fe_output = None # Placeholder
+    fe_name = None # Placeholder
+    preprocess_image(fe_input, fe_output, save_as=fe_name, display_image=True, normalize=True)
+
+

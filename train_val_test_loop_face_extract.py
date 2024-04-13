@@ -2,12 +2,12 @@ from typing import Literal
 import sys, time
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader, random_split, Subset
-from torchvision import datasets, transforms
+from torch.utils.data import DataLoader, Subset
+from torchvision import datasets
 from torchvision.transforms import v2
 import matplotlib.pyplot as plt
 import numpy as np
-from model import FakeFaceDetectorFE
+from model import FakeFaceDetectorFE, FakeFaceDetectorDevelopment
 from SQLDataModel import SQLDataModel
 
 DATASET_DIR = 'dataset/140k/real_vs_fake/real-vs-fake/'
@@ -20,7 +20,6 @@ def torch_tensor_to_numpy(torch_tensor:torch.Tensor) -> np.ndarray:
             f"Invalid dimensions '{arg_ndim}', value for `torch_tensor` must have 3 dimensions representing `(C, H, W)` to be able to convert into numpy array"
             )
     arr = torch_tensor.numpy().transpose((1,2,0))
-    # arr = (arr * 255).astype(np.uint8)
     return arr
 
 def inspect_random_image(display_image:bool=False, use_feature_extract:bool=False, normalize:bool=False, seed:int=42) -> None:
@@ -41,6 +40,14 @@ def inspect_random_image(display_image:bool=False, use_feature_extract:bool=Fals
 
     Returns:
         `None`
+
+    Example::
+
+        # This will display a randomly selected image
+        inspect_random_image(display_image=True, use_feature_extract=False, normalize=True, seed=4)
+
+    Note:
+        - Image details and normalization may render images with discoloration, ensure proper type conversions and normalizations.
     """
     torch.manual_seed(seed)
     loader, _, _ = get_image_dataloaders(1, use_feature_extract=use_feature_extract,batch_size=1,normalize_tensors=normalize)
@@ -80,7 +87,6 @@ def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False
     test_dir = f"{dataset_dir}/test"
     
     if normalize_tensors:
-        # transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor(),transforms.Normalize((images_mean,images_mean,images_mean),(images_std,images_std,images_std))])
         transform = v2.Compose([v2.ToImage()
                                 ,v2.ToDtype(torch.uint8, scale=True)
                                 ,v2.Resize(size=images_resize, antialias=True)
@@ -88,7 +94,6 @@ def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False
                                 ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     else:
-        # transform = transforms.Compose([transforms.Resize(images_resize),transforms.ToTensor()])
         transform = v2.Compose([v2.Resize(images_resize),v2.ToTensor()])
 
     train_dataset = datasets.ImageFolder(root=train_dir, transform=transform)
@@ -102,20 +107,46 @@ def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False
     valid_dataloader = DataLoader(valid_subset, batch_size=batch_size, shuffle=False)
     return train_dataloader, valid_dataloader, test_dataloader
 
-def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160), num_epochs:int=10, lr:float=0.005, val_subset:float=0.2, training_label:str='dev', normalize_tensors:bool=False, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False) -> None:
-    """Run the primary training loop with `max_samples` using `lr` specified for the `num_epochs` provided optionally saving model to `save_model` if provided."""
+def run_training(model:nn.Module, max_samples:int=10_000, images_resize:tuple[int,int]=(160,160), num_epochs:int=10, lr:float=0.0003, l2_decay:float=0.0001, val_subset:float=0.2, training_label:str='dev', normalize_tensors:bool=False, use_feature_extract:bool=False, save_model:bool=True, save_epoch_report:bool=True, save_batch_report:bool=False, seed:int=42) -> None:
+    """
+    Run the primary training loop for training artificially generated facial image classifier and optionally save model as .pth checkpoint.
+    
+    Parameters:
+        ``model`` (nn.Module): The neural network model to be trained, see ``model.py`` for current classes.
+        ``max_samples`` (int, optional): Maximum number of samples to use for training. Defaults to 10_000, max possible for dataset is 50_000.
+        ``images_resize`` (tuple[int, int], optional): Resize dimensions for the input images. Defaults to (160, 160) which should be used for the current model structure.
+        ``num_epochs`` (int, optional): Number of epochs for training. Defaults to 10.
+        ``lr`` (float, optional): Learning rate for the optimizer. Defaults to 0.0003 or 1e-4.
+        ``l2_decay`` (float, optional): L2 regularization weight decay. Defaults to 0.0001 or 1e-5.
+        ``val_subset`` (float, optional): Percentage of training data to use for validation. Defaults to 0.2.
+        ``training_label`` (str, optional): Label for the training phase. Defaults to 'dev'.
+        ``normalize_tensors`` (bool, optional): Whether to normalize input tensors. Defaults to False.
+        ``use_feature_extract`` (bool, optional): Whether to use feature extraction. Defaults to False.
+        ``save_model`` (bool, optional): Whether to save the trained model. Defaults to True.
+        ``save_epoch_report`` (bool, optional): Whether to save epoch-wise training reports. Defaults to True.
+        ``save_batch_report`` (bool, optional): Whether to save batch-wise training reports. Defaults to False.
+        ``seed`` (int, optional): Random seed for reproducibility. Defaults to 42.
+
+    Returns:
+        ``None``: Model state dict and CSV files may be created based on provided arguments.
+    
+    Note:
+        - Value for ``max_samples`` determines the total number of images which will be used for both train and test loops.
+        - Value for ``val_subset`` does not impact the size of the test dataset used for computing final result metrics.
+        - Value for ``images_resize`` should not be changed without changing the corresponding convolutional layers present in the ``model`` parameter.
+    """
+    torch.manual_seed(seed=seed)
     report_batch = {'Epoch':'int', 'Batch':'int', 'Type':'str','Loss':'float'}
     sdm_batch = SQLDataModel(dtypes=report_batch)
     report_epoch = {'Epoch':'int', 'Train Loss':'float', 'Validation Loss':'float', 'Validation Accuracy':'float', 'Time (seconds)':'float'}
-    sdm = SQLDataModel(dtypes=report_epoch)
+    sdm = SQLDataModel(dtypes=report_epoch, display_index=False, display_color='#A6D7E8')
     has_cuda = torch.cuda.is_available()
     device = torch.device("cuda" if has_cuda else "cpu")
     train_loader, valid_loader, test_loader = get_image_dataloaders(max_samples=max_samples, normalize_tensors=normalize_tensors, use_feature_extract=use_feature_extract, batch_size=32, images_resize=images_resize, val_subset=val_subset)
-    print(f"cuda device available: {has_cuda}")
-    
-    model = FakeFaceDetectorFE().to(device=device)
+    print(f'Started training with cuda = {has_cuda}...')
+    model = model.to(device=device)
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=l2_decay)
     train_batch_idx, val_batch_idx = 0, 0
     for epoch in range(num_epochs):
         start_time = time.time()  # Start timer for epoch        
@@ -162,15 +193,12 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160),
     print(sdm)
     if save_batch_report:
         print(sdm_batch)
-    report_summary = f"""(samples: {max_samples}, epochs: {num_epochs}, learing rate: {lr:.0e}, normalized tensors: {normalize_tensors}, used feature extraction: {use_feature_extract})"""
-    report_label = f"{training_label}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.csv" if not use_feature_extract else f"s{max_samples}-e{num_epochs}-lr{lr:.0e}+fe.csv"
-    if save_epoch_report:
-        sdm.to_csv(f"results/epoch-report-{report_label}")
-    if save_batch_report:
-        sdm_batch.to_csv(f"results/batch-report-{report_label}")
+    report_summary = f"""(Samples: {max_samples}, Epochs: {num_epochs}, LR: {lr:.0e}, Normalized: {normalize_tensors}, FEX: {use_feature_extract}, Seed: {seed})"""
+    report_label = f"{training_label}-s{max_samples}-e{num_epochs}-lr{lr:.0e}-din{model.d_input}-dout{model.d_output}-sd{seed}" if not use_feature_extract else f"+fe-s{max_samples}-e{num_epochs}-lr{lr:.0e}-din{model.d_input}-dout{model.d_output}-sd{seed}"
     # Test the model
-    model.eval()  # set the model to evaluation mode
+    model.eval()
     test_loss, correct, total = 0.0, 0, 0
+    TP, TN, FP, FN = 0, 0, 0, 0
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -178,24 +206,67 @@ def run_training(max_samples:int=10_000, images_resize:tuple[int,int]=(160,160),
             outputs = model(inputs)
             loss = criterion(outputs, labels.float())
             test_loss += loss.item()
-            
             predicted = (outputs.data > 0.5).float()
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            TP += ((predicted == 1) & (labels == 1)).sum().item()
+            TN += ((predicted == 0) & (labels == 0)).sum().item()
+            FP += ((predicted == 1) & (labels == 0)).sum().item()
+            FN += ((predicted == 0) & (labels == 1)).sum().item()            
         report_summary = f'Test Accuracy: {correct / total:.2%} ({correct} of {total}), Test Loss: {(test_loss/len(test_loader)):.4f} {report_summary}'
+        report_accuracy_prefix = f"T{correct / total:.3f}"
+    if save_epoch_report:
+        sdm.to_csv(f"results/{report_accuracy_prefix}-epoch-report-{report_label}.csv")
+    if save_batch_report:
+        sdm_batch.to_csv(f"results/{report_accuracy_prefix}-batch-report-{report_label}.csv")
     if save_model:
-        model_label = f"{training_label}-ffd{'+fe' if use_feature_extract else ''}-s{max_samples}-e{num_epochs}-lr{lr:.0e}.pt"
+        model_label = f"{report_accuracy_prefix}-{training_label}-ffd{'+fe' if use_feature_extract else ''}-s{max_samples}-e{num_epochs}-lr{lr:.0e}-din{model.d_input}-dout{model.d_output}-sd{seed}.pt"
         torch.save(model.state_dict(), model_label) 
         print(f"model saved to '{model_label}'")
     model.train()
+    precision = TP / (TP + FP) if TP + FP > 0 else 0
+    recall = TP / (TP + FN) if TP + FN > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if precision + recall > 0 else 0
+    report_summary = f'{report_summary}\nPrecision: {precision:.2f}, Recall: {recall:.2f}, F1-Score: {f1_score:.2f} ({TP = }, {FP = }, {FN = }, {TN = })'
     print(f'Finished with summary:\n{report_summary}')
 
-
 if __name__ == '__main__':
-    # NOTE: Best result:
-    # Test Accuracy: 83.55% (8355 of 10000), Test Loss: 0.4551 (samples: 10000, epochs: 10, learing rate: 1e-04, normalized tensors: True, used feature extraction: False)
+    SEED = 3
+    LABEL = 'huge+leaky+decay+deepconv'
+    LR = 1e-4
+    L2_DECAY = 1e-5
+    EPOCHS = 10
+    MAX_SAMPLES = 50_000
     FEATURE_EXTRACT = True
     NORMALIZE_TENSORS = True
-    run_training(training_label='compare+leaky',max_samples=10_000,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=10,lr=1e-4,save_model=True,save_epoch_report=True) 
-    
-    # inspect_random_image(display_image=True, use_feature_extract=False, normalize=True, seed=4)
+    SAVE_MODEL = True
+    SAVE_REPORT = True
+
+    # MODEL = FakeFaceDetectorDevelopment(d_input=32,d_output=64) # Best result
+    MODEL = FakeFaceDetectorDevelopment(d_input=32,d_output=48) # Run next
+
+    run_training(model=MODEL,training_label=LABEL,max_samples=MAX_SAMPLES,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=EPOCHS,lr=LR,l2_decay=L2_DECAY,save_model=SAVE_MODEL,save_epoch_report=SAVE_REPORT,val_subset=0.02, seed=SEED) 
+
+"""
+# NOTE: Best result :
+Precision: 0.88, Recall: 0.89, F1-Score: 0.88 (TP = 4436, FP = 619, FN = 563, TN = 4380)
+
+┌───────┬────────────┬─────────────────┬─────────────────────┬────────────────┐
+│ Epoch │ Train Loss │ Validation Loss │ Validation Accuracy │ Time (seconds) │
+├───────┼────────────┼─────────────────┼─────────────────────┼────────────────┤
+│     1 │     0.5515 │          0.4913 │              0.7560 │       482.4365 │
+│     2 │     0.4387 │          0.4029 │              0.8120 │       579.2948 │
+│     3 │     0.3479 │          0.3838 │              0.8230 │       681.0251 │
+│     4 │     0.2713 │          0.3336 │              0.8470 │       572.4646 │
+│     5 │     0.2081 │          0.3164 │              0.8560 │       475.3677 │
+│     6 │     0.1519 │          0.3096 │              0.8660 │       484.6768 │
+│     7 │     0.1092 │          0.3712 │              0.8450 │       528.1546 │
+│     8 │     0.0763 │          0.3364 │              0.8730 │       492.9541 │
+│     9 │     0.0496 │          0.3876 │              0.8660 │       486.7980 │
+│    10 │     0.0392 │          0.3607 │              0.8760 │       501.5699 │
+└───────┴────────────┴─────────────────┴─────────────────────┴────────────────┘
+[10 rows x 5 columns]
+
+Model: 'T0.882-huge+leaky+decay+deepconv+d64-ffd+fe-s50000-e10-lr1e-04-din32-dout64-sd3.pt'
+Summary: Test Accuracy: 88.18% (8816 of 9998), Test Loss: 0.3774 (Samples: 50000, Epochs: 10, LR: 1e-04, Normalized: True, FEX: True, Seed: 3)
+"""
