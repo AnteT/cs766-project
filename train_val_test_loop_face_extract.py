@@ -78,7 +78,7 @@ def inspect_random_image(display_image:bool=False, use_feature_extract:bool=Fals
             plt.show()
         return
 
-def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, normalize_tensors:bool=False, batch_size:int=32, images_resize:tuple=(160,160), images_mean:float=0.5, images_std:float=0.5, val_subset:float=0.2) -> tuple[DataLoader]:
+def get_image_dataloaders(max_samples:int=20_000, use_feature_extract:bool=False, normalize_tensors:bool=False, batch_size:int=32, images_resize:tuple=(160,160), val_subset:float=0.2) -> tuple[DataLoader]:
     """Returns `140k/` dataset in the format: ``(train_loader, validation_loader, test_loader)``"""
     dataset_dir = DATASET_DIR if not use_feature_extract else PROCESSED_DIR
 
@@ -232,7 +232,7 @@ def run_training(model:nn.Module, max_samples:int=10_000, images_resize:tuple[in
 
 if __name__ == '__main__':
     SEED = 3
-    LABEL = 'huge+leaky+decay+deepconv'
+    LABEL = 'tweakbest'
     LR = 1e-4
     L2_DECAY = 1e-5
     EPOCHS = 10
@@ -242,31 +242,30 @@ if __name__ == '__main__':
     SAVE_MODEL = True
     SAVE_REPORT = True
 
-    # MODEL = FakeFaceDetectorDevelopment(d_input=32,d_output=64) # Best result
-    MODEL = FakeFaceDetectorDevelopment(d_input=32,d_output=48) # Run next
+    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=64) # New best
+    MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=48) # Run next...
 
     run_training(model=MODEL,training_label=LABEL,max_samples=MAX_SAMPLES,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=EPOCHS,lr=LR,l2_decay=L2_DECAY,save_model=SAVE_MODEL,save_epoch_report=SAVE_REPORT,val_subset=0.02, seed=SEED) 
 
 """
 # NOTE: Best result :
-Precision: 0.88, Recall: 0.89, F1-Score: 0.88 (TP = 4436, FP = 619, FN = 563, TN = 4380)
-
 ┌───────┬────────────┬─────────────────┬─────────────────────┬────────────────┐
 │ Epoch │ Train Loss │ Validation Loss │ Validation Accuracy │ Time (seconds) │
 ├───────┼────────────┼─────────────────┼─────────────────────┼────────────────┤
-│     1 │     0.5515 │          0.4913 │              0.7560 │       482.4365 │
-│     2 │     0.4387 │          0.4029 │              0.8120 │       579.2948 │
-│     3 │     0.3479 │          0.3838 │              0.8230 │       681.0251 │
-│     4 │     0.2713 │          0.3336 │              0.8470 │       572.4646 │
-│     5 │     0.2081 │          0.3164 │              0.8560 │       475.3677 │
-│     6 │     0.1519 │          0.3096 │              0.8660 │       484.6768 │
-│     7 │     0.1092 │          0.3712 │              0.8450 │       528.1546 │
-│     8 │     0.0763 │          0.3364 │              0.8730 │       492.9541 │
-│     9 │     0.0496 │          0.3876 │              0.8660 │       486.7980 │
-│    10 │     0.0392 │          0.3607 │              0.8760 │       501.5699 │
+│     1 │     0.5417 │          0.4753 │              0.7620 │       455.1873 │
+│     2 │     0.4151 │          0.3909 │              0.8220 │       415.8705 │
+│     3 │     0.3223 │          0.3812 │              0.8250 │       452.0476 │
+│     4 │     0.2471 │          0.3493 │              0.8510 │       420.9366 │
+│     5 │     0.1848 │          0.3225 │              0.8560 │       459.7513 │
+│     6 │     0.1321 │          0.3318 │              0.8600 │       437.3831 │
+│     7 │     0.0933 │          0.3846 │              0.8570 │       450.0939 │
+│     8 │     0.0631 │          0.3998 │              0.8650 │       445.3541 │
+│     9 │     0.0421 │          0.4294 │              0.8610 │       507.4614 │
+│    10 │     0.0330 │          0.4165 │              0.8740 │       466.5454 │
 └───────┴────────────┴─────────────────┴─────────────────────┴────────────────┘
 [10 rows x 5 columns]
 
-Model: 'T0.882-huge+leaky+decay+deepconv+d64-ffd+fe-s50000-e10-lr1e-04-din32-dout64-sd3.pt'
-Summary: Test Accuracy: 88.18% (8816 of 9998), Test Loss: 0.3774 (Samples: 50000, Epochs: 10, LR: 1e-04, Normalized: True, FEX: True, Seed: 3)
+Model: 'T0.885-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din48-dout64-sd3.pt'
+Summary: Test Accuracy: 88.54% (8852 of 9998), Test Loss: 0.4022 (Samples: 50000, Epochs: 10, LR: 1e-04, Normalized: True, FEX: True, Seed: 3)  
+Conf Matrix: Precision: 0.86, Recall: 0.92, F1-Score: 0.89 (TP = 4604, FP = 751, FN = 395, TN = 4248)
 """

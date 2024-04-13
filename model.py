@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from facenet_pytorch import MTCNN
 
 class FakeFaceDetector(nn.Module):
     """Facial image binary classifier, images in batch must be size ``(64, 64)``."""
@@ -45,8 +46,8 @@ class FakeFaceDetectorDevelopment(nn.Module):
     def __init__(self, d_input:int=32, d_output:int=64): # d_input = 32, d_output = 64 best results so far
         super(FakeFaceDetectorDevelopment, self).__init__()
         self.d_input, self.d_output = d_input, d_output
-        self.conv1 = nn.Conv2d(3, d_input, 3, 1)
-        self.conv2 = nn.Conv2d(d_input, 128, 3, 1)  # Increased output channels
+        self.conv1 = nn.Conv2d(3, d_input, kernel_size=(3,3), stride=(1,1))
+        self.conv2 = nn.Conv2d(d_input, 128, kernel_size=(3,3), stride=(1,1))  # Increased output channels
         self.fc1 = nn.Linear(128*38*38, d_output)  # Adjusted input size
         self.fc2 = nn.Linear(d_output, 1)  # Adjusted input size
 
@@ -55,7 +56,7 @@ class FakeFaceDetectorDevelopment(nn.Module):
         x = F.max_pool2d(x, 2, 2)
         x = F.leaky_relu(self.conv2(x))
         x = F.max_pool2d(x, 2, 2)
-        x = x.view(-1, 128*38*38)  # Adjusted to match new channel size
+        x = x.view(x.size(0), -1)  # Adjusted to match new channel size
         x = F.leaky_relu(self.fc1(x))
         x = self.fc2(x)
         return torch.sigmoid(x)
@@ -80,13 +81,30 @@ def count_model_params(model: nn.Module, separate:bool=False) -> int|tuple[int, 
     biases = sum(p.numel() for p in model.parameters() if p.requires_grad and len(p.size()) == 1)
     return weights, biases
     
+def print_model_structure(model: nn.Module) -> None:
+    """Prints out the named parameters of the provided ``model`` in the format of ``layer: size`` and returns ``None``."""
+    print(model)
+    print("Model Structure:")
+    for name, param in model.named_parameters():
+        print(f"Layer: {name}, Size: {param.size()}  ({get_hwc_from_cwh(param)})")
+
+def get_hwc_from_cwh(x:torch.Tensor) -> tuple[int, int, int]:
+    """Extracts the size and converts the format from ``Channels, Width, Height`` to ``Height, Width, Channels`` and returns as a tuple."""
+    c, w, h = '_', '_', '_'
+    x = x.size()
+    xdim = len(x)
+    if xdim == 4:
+        c, w, h = x[1], x[2], x[3]
+    elif xdim == 3:
+        c, w, h = x[0], x[1], x[2]
+    elif xdim == 2:
+        w, h = x[0], x[1]
+    else:
+        h = x[0]
+    return (h, w, c)
+
 if __name__ == '__main__':
-    ffd = FakeFaceDetectorFE()
+    ffd = FakeFaceDetectorDevelopment(d_input=48, d_output=64) # 1625056
     num_params = count_model_params(ffd, separate=False)
-    print(f'{num_params = }')
-    ffd = FakeFaceDetector() # 1625056
-    num_params = count_model_params(ffd, separate=False)
-    print(f'{num_params = }')
-    ffd = FakeFaceDetectorDevelopment() # 1625056
-    num_params = count_model_params(ffd, separate=False)
-    print(f'{num_params = }')    
+    print(f'{num_params = }') 
+    print_model_structure(ffd)
