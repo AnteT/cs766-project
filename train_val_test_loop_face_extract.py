@@ -137,7 +137,7 @@ def run_training(model:nn.Module, max_samples:int=10_000, images_resize:tuple[in
     """
     torch.manual_seed(seed=seed)
     report_batch = {'Epoch':'int', 'Batch':'int', 'Type':'str','Loss':'float'}
-    sdm_batch = SQLDataModel(dtypes=report_batch)
+    sdm_batch = SQLDataModel(dtypes=report_batch, display_index=False)
     report_epoch = {'Epoch':'int', 'Train Loss':'float', 'Validation Loss':'float', 'Validation Accuracy':'float', 'Time (seconds)':'float'}
     sdm = SQLDataModel(dtypes=report_epoch, display_index=False, display_color='#A6D7E8')
     has_cuda = torch.cuda.is_available()
@@ -165,7 +165,8 @@ def run_training(model:nn.Module, max_samples:int=10_000, images_resize:tuple[in
             running_loss += loss.item()
             train_batch_loss = loss.item()
             train_batch_idx += 1
-            sdm_batch[sdm_batch.row_count] = [epoch+1,train_batch_idx,'training',round(train_batch_loss,6)]
+            if save_batch_report:
+                sdm_batch[sdm_batch.row_count] = [epoch+1,train_batch_idx,'training',round(train_batch_loss,6)]
         epoch_time = time.time() - start_time    
         training_loss = (running_loss/len(train_loader))         
 
@@ -181,7 +182,8 @@ def run_training(model:nn.Module, max_samples:int=10_000, images_resize:tuple[in
                 val_loss += loss.item()
                 val_batch_loss = loss.item()
                 val_batch_idx += 1
-                sdm_batch[sdm_batch.row_count] = [epoch+1,val_batch_idx,'validation',round(val_batch_loss,6)]
+                if save_batch_report:
+                    sdm_batch[sdm_batch.row_count] = [epoch+1,val_batch_idx,'validation',round(val_batch_loss,6)]
                 predicted = (outputs.data > 0.5).float()
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
@@ -241,11 +243,16 @@ if __name__ == '__main__':
     NORMALIZE_TENSORS = True
     SAVE_MODEL = True
     SAVE_REPORT = True
+    SAVE_BATCH_REPORT = False
+    
+    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=48) # Shittier Test Accuracy: 86.89% (8687 of 9998)
+    # MODEL = FakeFaceDetectorDevelopment(d_input=56,d_output=64) # Shittier Test Accuracy: 87.50% (8748 of 9998)
+    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=96) # Shittier Test Accuracy: 87.99% (8797 of 9998)
+    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=64) # Beeeesst Test Accuracy: 88.54% (8852 of 9998)
+    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=56) # Shittier Test Accuracy: 86.10% (8608 of 9998)
+    MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=72) # Run next
 
-    # MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=64) # New best
-    MODEL = FakeFaceDetectorDevelopment(d_input=48,d_output=48) # Run next...
-
-    run_training(model=MODEL,training_label=LABEL,max_samples=MAX_SAMPLES,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=EPOCHS,lr=LR,l2_decay=L2_DECAY,save_model=SAVE_MODEL,save_epoch_report=SAVE_REPORT,val_subset=0.02, seed=SEED) 
+    run_training(model=MODEL,training_label=LABEL,max_samples=MAX_SAMPLES,use_feature_extract=FEATURE_EXTRACT,normalize_tensors=NORMALIZE_TENSORS,images_resize=(160,160),num_epochs=EPOCHS,lr=LR,l2_decay=L2_DECAY,save_model=SAVE_MODEL,save_epoch_report=SAVE_REPORT,val_subset=0.02, save_batch_report=SAVE_BATCH_REPORT, seed=SEED) 
 
 """
 # NOTE: Best result :

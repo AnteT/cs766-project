@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms import v2
 from facenet_pytorch import MTCNN
 
 class FakeFaceDetector(nn.Module):
@@ -61,6 +62,84 @@ class FakeFaceDetectorDevelopment(nn.Module):
         x = self.fc2(x)
         return torch.sigmoid(x)
 
+class FakeFaceDetectorDevelopmentDebug(nn.Module):
+    """Debug version of best performing model to output tensor shapes after each layer."""
+    def __init__(self, d_input:int=32, d_output:int=64): # d_input = 32, d_output = 64 best results so far
+        super(FakeFaceDetectorDevelopmentDebug, self).__init__()
+        self.d_input, self.d_output = d_input, d_output
+        self.conv1 = nn.Conv2d(3, d_input, kernel_size=(3,3), stride=(1,1))
+        self.conv2 = nn.Conv2d(d_input, 128, kernel_size=(3,3), stride=(1,1))  # Increased output channels
+        self.fc1 = nn.Linear(128*38*38, d_output)  # Adjusted input size
+        self.fc2 = nn.Linear(d_output, 1)  # Adjusted input size
+
+    def forward(self, x:torch.Tensor):
+        print(f"On input:    {x.size()}")
+        x = self.conv1(x)
+        print(f"After conv1: {x.size()}")
+        x = F.leaky_relu(x)
+        x = F.max_pool2d(x, 2, 2)
+        print(f"After maxp1: {x.size()}")
+        x = self.conv2(x)
+        print(f"After conv2: {x.size()}")
+        x = F.leaky_relu(x)
+        x = F.max_pool2d(x, 2, 2)
+        print(f"After maxp2: {x.size()}")
+        x = x.view(x.size(0), -1)  # Adjusted to match new channel size
+        print(f"After flat:  {x.size()}")
+        x = self.fc1(x)
+        print(f"After fc1:   {x.size()}")
+        x = F.leaky_relu(x)
+        x = self.fc2(x)
+        print(f"After fc2:   {x.size()}")
+        return torch.sigmoid(x)
+    
+class FFXPhase(v2.Transform):
+    """Facial Feature Extraction phase of 2-phase model architecture, overrides torch.Transform to provide fallback transformation and normalization if face not detected and extracted."""
+    def __init__(self, fail_thresholds:tuple[int,int,int]=[0.6, 0.7, 0.7]) -> None:
+        super(FFXPhase, self).__init__()
+        self.fail_thresholds = fail_thresholds
+        
+        # Primary preferential transform
+        self.pt = v2.Compose([
+             MTCNN(image_size=160, margin=0, min_face_size=20, thresholds=self.fail_thresholds, factor=0.709, post_process=True)
+            ,v2.ToDtype(torch.float32, scale=True)
+            ,v2.Resize(size=(160,160), antialias=True)                                            
+            ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        # Secondary failsafe transform
+        self.st = v2.Compose([
+             v2.ToImage()
+            ,v2.ToDtype(torch.float32, scale=True)
+            ,v2.Resize(size=(160,160), antialias=True)
+            ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def __call__(self, x:torch.Tensor) -> torch.Tensor:
+        """Overrides call method ensuring a correctly processed tensor is returned in either outcome of phase-1 of FFX + FFD."""
+        xtp = self.pt(x)
+        return xtp if xtp is not None else self.st(x)
+
+class FFDPhase(nn.Module):
+    """Fake Facial Detection classifier phase of 2-phase model architecture, outputs ``1.0`` if prediction is real, ``0.0`` if fake."""
+    def __init__(self, d_input:int=32, d_output:int=64):
+        super(FFDPhase, self).__init__()
+        self.d_input, self.d_output = d_input, d_output
+        self.conv1 = nn.Conv2d(3, d_input, kernel_size=(3,3), stride=(1,1))
+        self.conv2 = nn.Conv2d(d_input, 128, kernel_size=(3,3), stride=(1,1))
+        self.fc1 = nn.Linear(128*38*38, d_output)
+        self.fc2 = nn.Linear(d_output, 1)
+
+    def forward(self, x):
+        x = F.leaky_relu(self.conv1(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = F.leaky_relu(self.conv2(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = x.view(x.size(0), -1)
+        x = F.leaky_relu(self.fc1(x))
+        x = self.fc2(x)
+        return torch.sigmoid(x)
+
 def count_model_params(model: nn.Module, separate:bool=False) -> int|tuple[int, int]:
     """
     Counts the number of parameters in the provided ``model`` and returns them. To count weights and biases separately, use ``separate=True`` to return a tuple of ``(num_weights, num_biases)``.
@@ -81,13 +160,6 @@ def count_model_params(model: nn.Module, separate:bool=False) -> int|tuple[int, 
     biases = sum(p.numel() for p in model.parameters() if p.requires_grad and len(p.size()) == 1)
     return weights, biases
     
-def print_model_structure(model: nn.Module) -> None:
-    """Prints out the named parameters of the provided ``model`` in the format of ``layer: size`` and returns ``None``."""
-    print(model)
-    print("Model Structure:")
-    for name, param in model.named_parameters():
-        print(f"Layer: {name}, Size: {param.size()}  ({get_hwc_from_cwh(param)})")
-
 def get_hwc_from_cwh(x:torch.Tensor) -> tuple[int, int, int]:
     """Extracts the size and converts the format from ``Channels, Width, Height`` to ``Height, Width, Channels`` and returns as a tuple."""
     c, w, h = '_', '_', '_'
@@ -103,8 +175,18 @@ def get_hwc_from_cwh(x:torch.Tensor) -> tuple[int, int, int]:
         h = x[0]
     return (h, w, c)
 
+def model_feasibility_test(model:nn.Module, input_size:tuple[int, int, int]=(3,160,160)) -> bool:
+    """Generates a tensor of ``input_size`` and runs it through a single forward pass of the provided ``model`` to confirm matrix multiplication structure is coherent, returning ``True`` if successful, ``False`` otherwise."""
+    input_tensor = torch.randn(1, *input_size)
+    try:
+        output_tensor = model(input_tensor)
+        print(f"Success: {output_tensor}")
+        return True
+    except Exception as e:
+        print(f"Failed due to: '{e}'")
+        return False
+        
 if __name__ == '__main__':
-    ffd = FakeFaceDetectorDevelopment(d_input=48, d_output=64) # 1625056
-    num_params = count_model_params(ffd, separate=False)
-    print(f'{num_params = }') 
-    print_model_structure(ffd)
+    # ffd = FakeFaceDetectorDevelopment(d_input=48, d_output=64) # 1625056
+    ffd = FakeFaceDetectorDevelopmentDebug(d_input=48, d_output=64) # 1625056
+    model_feasibility_test(ffd, input_size=(3,160,160))
