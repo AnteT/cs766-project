@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # for model in saved_models:
     #     run_testing(model, max_samples=1000)
 
-    model_path = 'results-best/T0.882-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din32-dout64-sd3.pt' # Second best
+    # model_path = 'results-best/T0.882-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din32-dout64-sd3.pt' # Second best
     model_path = 'results-best/T0.885-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din48-dout64-sd3.pt' # Best
     model = FakeFaceDetectorDevelopment(d_input=48, d_output=64)
     run_testing(model_path=model_path, model=model, max_samples=50_000, images_resize=(160,160), seed=35)

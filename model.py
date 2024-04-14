@@ -98,28 +98,26 @@ class FFXPhase(v2.Transform):
     def __init__(self, fail_thresholds:tuple[int,int,int]=[0.6, 0.7, 0.7]) -> None:
         super(FFXPhase, self).__init__()
         self.fail_thresholds = fail_thresholds
-        
         # Primary preferential transform
         self.pt = v2.Compose([
-             MTCNN(image_size=160, margin=0, min_face_size=20, thresholds=self.fail_thresholds, factor=0.709, post_process=True)
+             MTCNN(image_size=160, margin=0, min_face_size=20, thresholds=self.fail_thresholds, factor=0.709, post_process=False)
             ,v2.ToDtype(torch.float32, scale=True)
             ,v2.Resize(size=(160,160), antialias=True)                                            
             ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-
         # Secondary failsafe transform
         self.st = v2.Compose([
              v2.ToImage()
             ,v2.ToDtype(torch.float32, scale=True)
             ,v2.Resize(size=(160,160), antialias=True)
             ,v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ,v2.ToPILImage()
         ])
-
     def __call__(self, x:torch.Tensor) -> torch.Tensor:
         """Overrides call method ensuring a correctly processed tensor is returned in either outcome of phase-1 of FFX + FFD."""
         xtp = self.pt(x)
-        return xtp if xtp is not None else self.st(x)
-
+        return (v2.ToPILImage()(xtp / xtp.max())) if xtp is not None else self.st(x)
+    
 class FFDPhase(nn.Module):
     """Fake Facial Detection classifier phase of 2-phase model architecture, outputs ``1.0`` if prediction is real, ``0.0`` if fake."""
     def __init__(self, d_input:int=32, d_output:int=64):
