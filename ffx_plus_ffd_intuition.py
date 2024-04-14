@@ -64,8 +64,14 @@ def run_inference(image_path:str, use_ffx:bool=True, ffx:v2.Transform=FFXPhase, 
  
 
 if __name__ == '__main__':
+    baseline = [
+         'dataset/140k/real_vs_fake/real-vs-fake/test/fake/G4185199D1.jpg' # both correctly ID as Fake
+        ,'dataset/140k/real_vs_fake/real-vs-fake/test/fake/AV7F0USBRY.jpg' # both correctly ID as Fake
+        ,'dataset/140k/real_vs_fake/real-vs-fake/test/real/18233.jpg'      # both correctly ID as Real
+        ,'dataset/140k/real_vs_fake/real-vs-fake/test/real/54317.jpg'      # both correctly ID as Real
+    ]
     fake_images = [
-        'dataset/processed/test/fake/0BMMR954WG.jpg' # example baseline of FFD+FFX, should be classified as fake while FFD miscorrectly identifies as Real
+        'dataset/processed/test/fake/0BMMR954WG.jpg' # example of FFD+FFX, correctly classifying as fake while FFD miscorrectly identifies as Real
         ,'dataset/140k/real_vs_fake/real-vs-fake/test/fake/PG7VKQ4L9N.jpg' # example of FFD+FFX correctly classifying fake from unprocessed dataset used to train FFD only
         ,'dataset/real_and_fake_face/fake/easy_19_0111.jpg' # example 1 of FFD+FFX correctly classifying fake from foreign dataset (Photoshop)
         ,'dataset/real_and_fake_face/fake/easy_17_0011.jpg' # example 2 of FFD+FFX correctly classifying fake from foreign dataset (Photoshop)
@@ -73,11 +79,13 @@ if __name__ == '__main__':
 
     ffd_ffx_model_path = 'results-best/T0.885-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din48-dout64-sd3.pt'
     ffd_model_path = 'results-best/T0.921-huge+leaky-ffd-s50000-e10-lr1e-04.pt'
-    for fake_image in fake_images:
-        print(f"{f' {fake_image} ':-^120}")
-        pred_ffx_ffd, prob_ffx_ffd = run_inference(fake_image, display_result=False, use_ffx=True, ffd=FFDPhase, ffd_path=ffd_ffx_model_path)
+    
+    # for image in fake_images: # FFX+FFD versus FFD
+    for image in baseline: # Baseline
+        print(f"{f' {image} ':-^120}")
+        pred_ffx_ffd, prob_ffx_ffd = run_inference(image, display_result=False, use_ffx=True, ffd=FFDPhase, ffd_path=ffd_ffx_model_path)
         pred_ffx_ffd = "Real" if pred_ffx_ffd else "Fake"
-        pred_ffd, prob_ffd = run_inference(fake_image, display_result=False, use_ffx=False, ffd=FFDOnly, ffd_path=ffd_model_path)
+        pred_ffd, prob_ffd = run_inference(image, display_result=False, use_ffx=False, ffd=FFDOnly, ffd_path=ffd_model_path)
         pred_ffd = "Real" if pred_ffd else "Fake"
         print(f"FFX+FFD:   {pred_ffx_ffd}  ({prob_ffx_ffd:.4f})")
         print(f"FFD Only:  {pred_ffd}  ({prob_ffd:.4f})")
