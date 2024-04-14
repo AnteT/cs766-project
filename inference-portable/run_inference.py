@@ -62,7 +62,8 @@ def run_inference(image_path:str, ffx:v2.Transform=FFXPhase,ffd:nn.Module=FFDPha
     ffd.load_state_dict(torch.load(ffd_path))
     ffd.eval()   
     face = ffx(image)
-    output = ffd(face.unsqueeze(0) if len(face.shape) ==3 else face).item()
+    output = ffd(face.unsqueeze(0) if len(face.shape) ==3 else face)
+    predicted = (output.data > 0.5).float()
     pred = "Real" if output else "Fake"
     print(pred, output)
     face = np.transpose(np.array(face),(1,2,0))
