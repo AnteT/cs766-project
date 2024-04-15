@@ -61,7 +61,6 @@ def run_inference(image_path:str, use_ffx:bool=True, ffx:v2.Transform=FFXPhase, 
         plt.tight_layout()
         plt.show()    
     return pred.item(), prob
- 
 
 if __name__ == '__main__':
     baseline = [
