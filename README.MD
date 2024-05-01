@@ -3,7 +3,13 @@
 
 ---
 ### Project Structure
-This repository is a part of a broader submission for Computer Vision 766 at the University of Wisconsin-Madison for Spring 2024 semester. It represents the source code portion and is a companion repository for the related [website repository](https://github.com/AnteT/ffd-app) which contains the primary project details. The website is available [here](https://antet.github.io/ffd-app), while the rest of the project source is structured as follows:
+This repository is a part of a broader submission for Computer Vision 766 at the University of Wisconsin-Madison for Spring 2024 semester. It represents the source code portion and is a companion repository for the related [website repository](https://github.com/AnteT/ffd-app) which contains the primary project details. The three primary portions of the broader submission are linked below:
+
+- [**Final Website**](https://antet.github.io/ffd-app)
+- [**Source Repository**](https://github.com/AnteT/cs766-project)
+- [**Presentation Repository**](https://github.com/AnteT/ffd-app)
+
+While the rest of this project repository is structured as follows:
 
 ```text
 Project
