@@ -1,3 +1,5 @@
+import sys
+import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -52,7 +54,7 @@ class FFDPhase(nn.Module):
         x = self.fc2(x)
         return torch.sigmoid(x)
 
-def run_inference(image_path:str, ffx:v2.Transform=FFXPhase, ffd:nn.Module=FFDPhase, ffd_path:str='results-best/T0.885-huge+leaky+decay+deepconv-ffd+fe-s50000-e10-lr1e-04-din48-dout64-sd3.pt', display_result:bool=False) -> tuple[int, float]:
+def run_inference(image_path:str, ffx:v2.Transform=FFXPhase, ffd:nn.Module=FFDPhase, ffd_path:str='inference-portable/ffd.pt', display_result:bool=False, save_result:str=None) -> tuple[int, float]:
     """
     Run inference using the 2-phase FFX+FFD model on the provided image path and optionally displays the result.
 
@@ -86,7 +88,8 @@ def run_inference(image_path:str, ffx:v2.Transform=FFXPhase, ffd:nn.Module=FFDPh
     prob = output.item()
     pred = (output.data > 0.5).float()
     result = "Real" if pred else "Fake"
-    print(f"{result} ({prob:.4f})")
+    conf = 1-prob if result == "Fake" else prob
+    print(f"{image_path}: {result} ({conf:.4f})")
     if display_result:
         face = np.transpose(np.array(face),(1,2,0))
         face = face - face.min()
@@ -96,17 +99,38 @@ def run_inference(image_path:str, ffx:v2.Transform=FFXPhase, ffd:nn.Module=FFDPh
         axes[0].set_title('Input image:')
         axes[0].axis('off')
         axes[1].imshow(face)
-        axes[1].set_title('FFX phase:')
+        axes[1].set_title('FFX output:')
         axes[1].axis('off')
-        fig.suptitle(f"Result of FFD phase on FFX: {result} ({(1-prob if result == "Fake" else prob):.4f})\n", fontsize=16)
+        fig.suptitle(f" Result of Inference with FFD phase on FFX: {result} ({conf:.4f}) ", fontsize=15)
         plt.tight_layout()
+        if save_result is not None:
+            plt.savefig(f'{save_result}',dpi=399)
         plt.show()    
     return pred.item(), prob    
 
+def run_demo() -> None:
+    """Run inference on the provided demonstration images."""
+    fake_img = "./fake-face.jpg"
+    run_inference(fake_img, display_result=True)
+    real_img = "./real-face.jpg"
+    run_inference(real_img, display_result=True)    
+
+def main() -> None:
+    """Primary entry-point for running inference through CLI arguments for one or more image paths."""
+    parser = argparse.ArgumentParser(description='Run Facial Extraction & Fake Facial Detection inference on one or more images.')
+    parser.add_argument('image_paths', nargs='+', help='Paths to the images to be processed, at least 1 is required.')
+    parser.add_argument('-d', '--display', action='store_true', help='Display the images with the result.')
+    args = parser.parse_args()
+    image_paths = args.image_paths
+    display = args.display
+    for image_path in image_paths:
+        run_inference(image_path=image_path, display_result=display)
+
 if __name__ == '__main__':
-    # Ensure path in ffd_path is correct and run inference for test image
-    fake_image = 'dataset/140k/real_vs_fake/real-vs-fake/test/fake/4H13NVCXRU.jpg'
-    run_inference(fake_image, display_result=True)
-    real_image = 'dataset/140k/real_vs_fake/real-vs-fake/test/real/18233.jpg'    
-    run_inference(real_image, display_result=True)
+    main()
+    # python .\inference-portable\run_inference.py "inference-portable/fake-face.jpg"  "inference-portable/real-face.jpg"
+    # fake_img = "inference-portable/fake-face.jpg"
+    # run_inference(fake_img, display_result=True, save_result="C:/Users/212765834/Desktop/Personal Repos/CS766 - Computer Vision/CS766 - Webpage/cvapp/inference/inf-fake-face.png")
+    # real_img = "inference-portable/real-face.jpg"
+    # run_inference(real_img, display_result=True, save_result="C:/Users/212765834/Desktop/Personal Repos/CS766 - Computer Vision/CS766 - Webpage/cvapp/inference/inf-real-face.png")
     
